@@ -2,7 +2,7 @@ const express = require('express');
 const app = express();
 const PORT = 8080;
 const cors = require('cors');
-const webhookURL = 'https://discord.com/api/webhooks/1382536220021624882/LGl7NPWAZiclhVDocgG17CYZ-aLLVmSXSvbqPOEdN7Nn_W5OluG5Wpqzgp7VrPoHId4U';
+const webhookURL = 'https://discord.com/api/webhooks/1416219915936989304/LuhVMyQo4ngb8tYnK6yTThxFT9n_ISdcoNlZYXPU3Kj4d52FcM0y9gTlEsXmaXzLF4k9';
 console.log('starting server...');
 
 app.use((req, res, next) => {
