@@ -1,50 +1,41 @@
-# Stage 1: Build wombat with Node
-FROM node:16-alpine AS builder
+FROM node:16-alpine as builder
 
-# Install build tools
-RUN apk add --no-cache git python3 make g++ libc-dev
+# build wombat
+RUN apk add git python3 make gcc musl-dev libc-dev g++
+COPY . /opt/womginx
 
 WORKDIR /opt/womginx
-
-# Copy all project files
-COPY . .
-
-# Initialize git and add wombat submodule
+# for whatever reason, heroku doesn't copy the .git folder and the .gitmodules file, so we're
+# approaching this assuming they will never exist
 RUN rm -rf .git && git init
 WORKDIR /opt/womginx/public
 RUN rm -rf wombat && git submodule add https://github.com/webrecorder/wombat
 WORKDIR /opt/womginx/public/wombat
-# Lock wombat to a stable commit
+# wombat's latest version (as of January 4th, 2022; commit 72db794) breaks websocket functionality.
+# Locking the version here temporarily until I can find a solution
 RUN git checkout 78813ad
 
-# Install npm dependencies and build wombat
-RUN npm install --legacy-peer-deps
-RUN npm run build-prod
+RUN npm install --legacy-peer-deps && npm run build-prod
 
-# Move build output to a clean folder
-RUN mv dist /opt/womginx/dist && rm -rf node_modules .git
+# delete everything but the dist folder to save us an additional 50MB+
+RUN mv dist .. && rm -rf * .git && mv ../dist/ .
 
-# Run docker-sed.sh to modify nginx.conf if needed
+# modify nginx.conf
 WORKDIR /opt/womginx
+
 RUN ./docker-sed.sh
 
-# Stage 2: Serve with Nginx
 FROM nginx:stable-alpine
 
-# Copy built files
-COPY --from=builder /opt/womginx/dist /usr/share/nginx/html
+# default environment variables in case a normal user doesn't specify it
+ENV PORT=80
+# set SAFE_BROWSING to any value to enable it
+#ENV SAFE_BROWSING=1
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /opt/womginx /opt/womginx
+RUN cp /opt/womginx/nginx.conf /etc/nginx/nginx.conf
 
-# Remove SSL config lines from nginx.conf if present (prevent errors)
-RUN sed -i '/ssl_certificate/d' /etc/nginx/nginx.conf \
-    && sed -i '/ssl_certificate_key/d' /etc/nginx/nginx.conf
-
-# Test nginx configuration
+# make sure nginx.conf works (mainly used for development)
 RUN nginx -t
 
-# Expose port and start nginx
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-
+CMD /opt/womginx/docker-entrypoint.sh
