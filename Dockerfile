@@ -1,41 +1,27 @@
-FROM node:16-alpine as builder
+FROM node:16-alpine AS builder
 
-# build wombat
-RUN apk add git python3 make gcc musl-dev libc-dev g++
-COPY . /opt/womginx
+RUN apk add git python3 make g++ libc-dev
 
 WORKDIR /opt/womginx
-# for whatever reason, heroku doesn't copy the .git folder and the .gitmodules file, so we're
-# approaching this assuming they will never exist
+COPY . .
+
 RUN rm -rf .git && git init
 WORKDIR /opt/womginx/public
 RUN rm -rf wombat && git submodule add https://github.com/webrecorder/wombat
 WORKDIR /opt/womginx/public/wombat
-# wombat's latest version (as of January 4th, 2022; commit 72db794) breaks websocket functionality.
-# Locking the version here temporarily until I can find a solution
 RUN git checkout 78813ad
 
-RUN npm install --legacy-peer-deps && npm run build-prod
-
-# delete everything but the dist folder to save us an additional 50MB+
-RUN mv dist .. && rm -rf * .git && mv ../dist/ .
-
-# modify nginx.conf
 WORKDIR /opt/womginx
+RUN npm install --legacy-peer-deps && npm run build-prod
+RUN mv dist /opt/womginx/dist && rm -rf node_modules .git
 
 RUN ./docker-sed.sh
 
+# final Nginx stage
 FROM nginx:stable-alpine
-
-# default environment variables in case a normal user doesn't specify it
-ENV PORT=80
-# set SAFE_BROWSING to any value to enable it
-#ENV SAFE_BROWSING=1
-
-COPY --from=builder /opt/womginx /opt/womginx
-RUN cp /opt/womginx/nginx.conf /etc/nginx/nginx.conf
-
-# make sure nginx.conf works (mainly used for development)
+COPY --from=builder /opt/womginx/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
 RUN nginx -t
 
-CMD /opt/womginx/docker-entrypoint.sh
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
