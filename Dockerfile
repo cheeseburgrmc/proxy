@@ -37,9 +37,14 @@ COPY --from=builder /opt/womginx/dist /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# Remove SSL config lines from nginx.conf if present (prevent errors)
+RUN sed -i '/ssl_certificate/d' /etc/nginx/nginx.conf \
+    && sed -i '/ssl_certificate_key/d' /etc/nginx/nginx.conf
+
 # Test nginx configuration
 RUN nginx -t
 
 # Expose port and start nginx
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
+
